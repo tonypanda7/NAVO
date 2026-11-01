@@ -429,6 +429,21 @@ export default function NavoApp() {
                         onMarkDone={(id) => handleStatusChange(id, 'completed')}
                       />
                     ))}
+
+                  {saves.filter((s) => s.status === 'active').length === 0 && (
+                    <div className="col-span-full p-8 text-center bg-white rounded-xl border border-[#EBEAE5] text-xs text-[#78716C]">
+                      <Sparkles className="w-8 h-8 text-[#D9532F] mx-auto mb-2" />
+                      <p className="font-semibold text-sm text-[#1C1917]">Your workspace is completely clean</p>
+                      <p className="mt-1">No placeholder data. Paste any reel or link to run Llama 3.3 70B and start follow-through.</p>
+                      <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D9532F] text-white font-medium text-xs shadow-sm hover:bg-[#C24523] transition-all"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Save Your First Reel</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,16 +1,8 @@
 // Navo - Stats API for dashboard
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db';
-import { seedDatabase } from '@/db/seed';
-
-let seeded = false;
 
 export async function GET() {
-  if (!seeded) {
-    seedDatabase();
-    seeded = true;
-  }
-  
   const db = getDb();
 
   const totalSaves = (db.prepare('SELECT COUNT(*) as count FROM saves').get() as { count: number }).count;

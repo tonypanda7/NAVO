@@ -78,11 +78,11 @@ export default function AddSaveModal({
         })
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error('Failed to analyze reel with DeepInfra Llama 70B');
+        throw new Error(data.error || 'Failed to analyze reel with DeepInfra Llama 70B');
       }
 
-      const data = await res.json();
       setParseResult(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Analysis failed. Please check the URL.');
@@ -106,8 +106,9 @@ export default function AddSaveModal({
         })
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error('Failed to create save');
+        throw new Error(data.error || 'Failed to create save');
       }
 
       onSaveCreated();

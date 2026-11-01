@@ -13,10 +13,11 @@ export async function POST(request: NextRequest) {
   try {
     const result = await parseUrl(url, context);
     return NextResponse.json(result);
-  } catch (error) {
-    console.error('Parse error:', error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to parse URL with DeepInfra Llama 70B';
+    console.error('Parse error:', message);
     return NextResponse.json(
-      { error: 'Failed to parse URL with DeepInfra Llama 70B' }, 
+      { error: message }, 
       { status: 500 }
     );
   }

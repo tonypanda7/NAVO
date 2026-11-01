@@ -1,22 +1,10 @@
 // Navo - Saves API (GET all, POST new save)
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db';
-import { seedDatabase } from '@/db/seed';
 import { parseUrl } from '@/lib/parser';
 import { randomUUID } from 'crypto';
 
-// Ensure seeded on first request
-let seeded = false;
-
-function ensureSeeded() {
-  if (!seeded) {
-    seedDatabase();
-    seeded = true;
-  }
-}
-
 export async function GET(request: NextRequest) {
-  ensureSeeded();
   const db = getDb();
   const { searchParams } = new URL(request.url);
   
@@ -85,7 +73,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  ensureSeeded();
   const db = getDb();
   const body = await request.json();
   const { url, context } = body;
@@ -95,7 +82,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse the URL using DeepInfra Llama 70B
-  const parseResult = await parseUrl(url, context);
+  let parseResult;
+  try {
+    parseResult = await parseUrl(url, context);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'DeepInfra Llama extraction failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
   
   const saveId = randomUUID();
   const now = new Date().toISOString();
