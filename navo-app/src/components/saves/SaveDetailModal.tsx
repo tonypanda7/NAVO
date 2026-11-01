@@ -110,6 +110,14 @@ export default function SaveDetailModal({
               </a>
               <span>•</span>
               <span>Saved {formatDate(save.created_at)}</span>
+              {typeof save.analysis_cost_usd === 'number' && (
+                <>
+                  <span>•</span>
+                  <span className="font-mono text-[#2C6E49] bg-[#EBF4EE] px-1.5 py-0.5 rounded text-[10px] font-semibold border border-[#D0E7D6]">
+                    Cost: ${save.analysis_cost_usd.toFixed(5)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 

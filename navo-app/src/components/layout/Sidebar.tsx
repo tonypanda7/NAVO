@@ -150,16 +150,22 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* AI Engine Status */}
-        <div className="flex items-center justify-between px-2 py-1 text-[11px] text-[#78716C]">
-          <div className="flex items-center gap-1.5">
-            <Cpu className="w-3.5 h-3.5 text-[#D9532F]" />
-            <span className="font-medium text-[#44403C]">Llama 70B</span>
+        {/* AI Engine Status & Cost Per Reel */}
+        <div className="p-2.5 rounded-lg bg-[#FAF9F5] border border-[#E8E6E0] space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-[#D9532F]" />
+              <span className="font-semibold text-[#1C1917]">Llama 3.3 70B</span>
+            </div>
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#2C6E49] font-semibold bg-[#EBF4EE] px-1.5 py-0.2 rounded">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2C6E49] animate-pulse" />
+              DeepInfra
+            </span>
           </div>
-          <span className="inline-flex items-center gap-1 text-[10px] text-[#2C6E49] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#2C6E49] animate-pulse" />
-            Ready
-          </span>
+          <div className="flex items-center justify-between text-[10px] text-[#78716C]">
+            <span>Cost per reel:</span>
+            <span className="font-mono font-medium text-[#2C6E49]">~$0.00003</span>
+          </div>
         </div>
       </div>
     </aside>

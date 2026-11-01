@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS saves (
   space TEXT,
   project TEXT,
   estimated_minutes INTEGER,
+  analysis_cost_usd REAL DEFAULT 0.00003,
+  model_name TEXT DEFAULT 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

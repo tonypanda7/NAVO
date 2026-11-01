@@ -117,6 +117,8 @@ export interface Save {
   estimated_minutes: number | null;
   created_at: string;
   updated_at: string;
+  analysis_cost_usd?: number | null;
+  model_name?: string | null;
   steps?: ActionStep[];
   reminders?: Reminder[];
 }
@@ -151,6 +153,9 @@ export interface ParseResult {
   extracted_data: ExtractedData;
   estimated_minutes: number | null;
   suggested_steps: { title: string; description?: string }[];
+  analysis_cost_usd?: number | null;
+  tokens_used?: number | null;
+  model_name?: string | null;
 }
 
 // UI State types

@@ -88,28 +88,31 @@ export async function POST(request: NextRequest) {
   ensureSeeded();
   const db = getDb();
   const body = await request.json();
-  const { url } = body;
+  const { url, context } = body;
 
   if (!url) {
     return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   }
 
-  // Parse the URL using AI
-  const parseResult = await parseUrl(url);
+  // Parse the URL using DeepInfra Llama 70B
+  const parseResult = await parseUrl(url, context);
   
   const saveId = randomUUID();
   const now = new Date().toISOString();
 
   // Insert the save
   db.prepare(`
-    INSERT INTO saves (id, url, title, thumbnail_url, content_type, intent, intent_confirmed, status, deadline, deadline_source, deadline_confirmed, source_platform, extracted_data, space, project, estimated_minutes, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO saves (id, url, title, thumbnail_url, content_type, intent, intent_confirmed, status, deadline, deadline_source, deadline_confirmed, source_platform, extracted_data, space, project, estimated_minutes, analysis_cost_usd, model_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     saveId, url, parseResult.title, null,
     parseResult.content_type, parseResult.intent, 0, 'active',
     parseResult.deadline, parseResult.deadline_source, parseResult.deadline ? 0 : 0,
     parseResult.source_platform, JSON.stringify(parseResult.extracted_data),
-    null, null, parseResult.estimated_minutes, now, now
+    null, null, parseResult.estimated_minutes,
+    parseResult.analysis_cost_usd || 0.00003,
+    parseResult.model_name || 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    now, now
   );
 
   // Insert action steps

@@ -10,7 +10,10 @@ import {
   CheckCircle2, 
   ArrowRight,
   ListChecks,
-  AlertCircle
+  AlertCircle,
+  Coins,
+  Cpu,
+  FileText
 } from 'lucide-react';
 import type { ParseResult, ContentType, Intent } from '@/types';
 import { getContentTypeIcon, getContentTypeLabel, getIntentLabel } from '@/lib/utils';
@@ -27,6 +30,8 @@ export default function AddSaveModal({
   onSaveCreated
 }: AddSaveModalProps) {
   const [url, setUrl] = useState('');
+  const [context, setContext] = useState('');
+  const [showContextInput, setShowContextInput] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
@@ -35,13 +40,29 @@ export default function AddSaveModal({
   if (!isOpen) return null;
 
   const sampleUrls = [
-    { label: 'Google SWE Internship', url: 'https://www.instagram.com/reel/google-swe-internship-summer-2027' },
-    { label: 'Matcha Tiramisu Recipe', url: 'https://www.instagram.com/reel/easy-matcha-tiramisu-recipe' },
-    { label: 'Bangalore Cafe Guide', url: 'https://www.instagram.com/reel/top-5-aesthetic-cafes-koramangala' },
-    { label: 'Stanford CS Tutorial', url: 'https://www.youtube.com/watch?v=stanford-cs-deep-learning' }
+    { 
+      label: 'Google SWE Internship', 
+      url: 'https://www.instagram.com/reel/google-swe-internship-summer-2027',
+      context: 'Google SWE Summer 2027 Intern application opened! Eligibility: 2nd/3rd year CS. Deadline Nov 15 on careers.google.com'
+    },
+    { 
+      label: 'Matcha Tiramisu Recipe', 
+      url: 'https://www.instagram.com/reel/easy-matcha-tiramisu-recipe',
+      context: '10 min prep, mascarpone, ladyfingers, matcha powder, chill 4 hours.'
+    },
+    { 
+      label: 'Bangalore Cafe Guide', 
+      url: 'https://www.instagram.com/reel/top-5-aesthetic-cafes-koramangala',
+      context: 'Blue Tokai Koramangala best for cold brew & quiet work on weekend mornings.'
+    },
+    { 
+      label: 'Stanford CS Tutorial', 
+      url: 'https://www.youtube.com/watch?v=stanford-cs-deep-learning',
+      context: 'Lecture 1: Machine Learning Foundations, supervised vs unsupervised, 45 mins.'
+    }
   ];
 
-  const handleParse = async (urlToParse: string) => {
+  const handleParse = async (urlToParse: string, contextToParse?: string) => {
     if (!urlToParse.trim()) return;
     setIsParsing(true);
     setError(null);
@@ -51,11 +72,14 @@ export default function AddSaveModal({
       const res = await fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlToParse.trim() })
+        body: JSON.stringify({ 
+          url: urlToParse.trim(),
+          context: (contextToParse !== undefined ? contextToParse : context).trim() || undefined
+        })
       });
 
       if (!res.ok) {
-        throw new Error('Failed to analyze reel URL');
+        throw new Error('Failed to analyze reel with DeepInfra Llama 70B');
       }
 
       const data = await res.json();
@@ -76,7 +100,10 @@ export default function AddSaveModal({
       const res = await fetch('/api/saves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() })
+        body: JSON.stringify({ 
+          url: url.trim(),
+          context: context.trim() || undefined
+        })
       });
 
       if (!res.ok) {
@@ -109,7 +136,7 @@ export default function AddSaveModal({
                 Save Reel or Link
               </h3>
               <p className="text-xs text-[#78716C]">
-                Navo extracts why you saved it and builds an instant action plan.
+                Analyzed with DeepInfra Llama 3.3 70B Turbo into structured follow-through steps.
               </p>
             </div>
           </div>
@@ -135,7 +162,7 @@ export default function AddSaveModal({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://www.instagram.com/reel/..."
-                className="w-full bg-[#F7F6F2] focus:bg-white text-sm text-[#1C1917] placeholder-[#A8A29E] pl-9 pr-24 py-2.5 rounded-lg border border-[#E5E3DC] focus:border-[#D9532F] focus:outline-none transition-all"
+                className="w-full bg-[#F7F6F2] focus:bg-white text-sm text-[#1C1917] placeholder-[#A8A29E] pl-9 pr-28 py-2.5 rounded-lg border border-[#E5E3DC] focus:border-[#D9532F] focus:outline-none transition-all"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -147,24 +174,63 @@ export default function AddSaveModal({
                 type="button"
                 onClick={() => handleParse(url)}
                 disabled={!url.trim() || isParsing}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#D9532F] hover:bg-[#C24523] disabled:opacity-40 text-white rounded-md text-xs font-medium transition-all flex items-center gap-1"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#D9532F] hover:bg-[#C24523] disabled:opacity-40 text-white rounded-md text-xs font-medium transition-all flex items-center gap-1 shadow-sm"
               >
                 {isParsing ? (
                   <>
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Reading...</span>
+                    <span>Analyzing...</span>
                   </>
                 ) : (
-                  <span>Analyze</span>
+                  <>
+                    <Sparkles className="w-3 h-3" />
+                    <span>Run Llama</span>
+                  </>
                 )}
               </button>
             </div>
           </div>
 
+          {/* Optional Caption / Notes dropdown */}
+          <div>
+            {!showContextInput ? (
+              <button
+                type="button"
+                onClick={() => setShowContextInput(true)}
+                className="text-[11px] text-[#78716C] hover:text-[#D9532F] flex items-center gap-1 font-medium"
+              >
+                <FileText className="w-3 h-3" />
+                <span>+ Add optional caption or reel text for better extraction</span>
+              </button>
+            ) : (
+              <div className="space-y-1.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-[#78716C]">
+                    Reel Caption / Text (Optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowContextInput(false)}
+                    className="text-[10px] text-[#A8A29E] hover:text-[#78716C]"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Paste any text from the reel caption, comments, or deadline info..."
+                  rows={2}
+                  className="w-full bg-[#F7F6F2] focus:bg-white text-xs text-[#1C1917] placeholder-[#A8A29E] p-2.5 rounded-lg border border-[#E5E3DC] focus:border-[#D9532F] focus:outline-none transition-all"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Sample quick paste chips */}
           <div className="space-y-1.5">
             <span className="text-[11px] font-medium text-[#A8A29E] block">
-              Try a demo link:
+              Try a demo link with real Llama analysis:
             </span>
             <div className="flex flex-wrap gap-1.5">
               {sampleUrls.map((s, idx) => (
@@ -173,7 +239,9 @@ export default function AddSaveModal({
                   type="button"
                   onClick={() => {
                     setUrl(s.url);
-                    handleParse(s.url);
+                    setContext(s.context);
+                    setShowContextInput(true);
+                    handleParse(s.url, s.context);
                   }}
                   className="px-2.5 py-1 rounded bg-[#F4F3EE] hover:bg-[#EAE8E1] text-[#57534E] text-[11px] font-medium border border-[#E7E5DF] transition-colors"
                 >
@@ -197,10 +265,13 @@ export default function AddSaveModal({
               <div className="flex items-center justify-between pb-2 border-b border-[#EAE8E1]">
                 <span className="text-xs font-semibold text-[#1C1917] flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-[#D9532F]" />
-                  Understanding Engine Extracted:
+                  Extracted via Llama 3.3 70B Turbo:
                 </span>
-                <span className="text-[10px] text-[#2C6E49] bg-[#EBF4EE] px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                  Success
+                
+                {/* Cost Per Reel Badge */}
+                <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold bg-[#EBF4EE] text-[#2C6E49] px-2 py-0.5 rounded border border-[#CDE5D4]">
+                  <Coins className="w-3 h-3 text-[#2C6E49]" />
+                  <span>Cost: ${typeof parseResult.analysis_cost_usd === 'number' ? parseResult.analysis_cost_usd.toFixed(6) : '0.00003'}</span>
                 </span>
               </div>
 
@@ -217,7 +288,7 @@ export default function AddSaveModal({
                   </span>
                   {parseResult.deadline && (
                     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-[#FFFBEB] border border-[#FDE68A] font-semibold text-[#B45309]">
-                      <Calendar className="w-3 h-3" /> Due {parseResult.deadline}
+                      <Calendar className="w-3 h-3" /> Due {parseResult.deadline} ({parseResult.deadline_source || 'caption'})
                     </span>
                   )}
                 </div>
@@ -230,18 +301,34 @@ export default function AddSaveModal({
                     <ListChecks className="w-3.5 h-3.5 text-[#D9532F]" />
                     Generated Action Steps ({parseResult.suggested_steps.length})
                   </span>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {parseResult.suggested_steps.map((step, idx) => (
                       <div key={idx} className="flex items-start gap-2 text-xs text-[#44403C]">
                         <span className="w-4 h-4 rounded-full bg-[#EAE8E1] text-[#78716C] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                           {idx + 1}
                         </span>
-                        <span>{step.title}</span>
+                        <div>
+                          <span className="font-medium text-[#1C1917]">{step.title}</span>
+                          {step.description && (
+                            <span className="text-[#78716C] block text-[11px]">{step.description}</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* Model & Token metadata strip */}
+              <div className="pt-2 border-t border-[#EAE8E1] flex items-center justify-between text-[10px] text-[#A8A29E]">
+                <span className="flex items-center gap-1">
+                  <Cpu className="w-3 h-3 text-[#D9532F]" />
+                  <span>{parseResult.model_name || 'meta-llama/Llama-3.3-70B-Instruct-Turbo'}</span>
+                </span>
+                {parseResult.tokens_used && (
+                  <span>{parseResult.tokens_used} tokens</span>
+                )}
+              </div>
             </div>
           )}
         </div>
