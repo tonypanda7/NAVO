@@ -9,6 +9,7 @@ import { URL } from 'url';
 import type { ParseResult, ContentType, Intent, DeadlineSource, SourcePlatform } from '@/types';
 import { transcribeAudio } from './whisper';
 import { extractVisualAndOcr } from './vision';
+import { fetchUrlMetadata, ScrapedMetadata } from './scraper';
 
 const LLM_API_URL = process.env.LLM_API_URL || 'https://api.deepinfra.com/v1/openai/chat/completions';
 const LLM_API_KEY = process.env.DEEPINFRA_API_KEY || process.env.LLM_API_KEY || '';
@@ -128,6 +129,14 @@ export async function parseUrl(input: string | ParseInput, legacyContext?: strin
   let visionCost = 0;
   let visionOcrText: string | null = null;
 
+  // 0. Fetch public platform metadata if available (YouTube Shorts oEmbed, Web OpenGraph)
+  let scrapedMeta: ScrapedMetadata | null = null;
+  try {
+    scrapedMeta = await fetchUrlMetadata(options.url);
+  } catch (err) {
+    console.warn('Scraper warning:', err);
+  }
+
   // 1. Run Whisper Large-v3 if audio is attached
   if (options.audioBase64) {
     try {
@@ -156,6 +165,12 @@ export async function parseUrl(input: string | ParseInput, legacyContext?: strin
 
   // 3. Assemble full multimodal prompt for Llama 3.3 70B
   let assembledContext = '';
+  if (scrapedMeta?.title || scrapedMeta?.description) {
+    assembledContext += `\n[PLATFORM AUTO-METADATA (${scrapedMeta.provider || 'Public Web'})]:\n`;
+    if (scrapedMeta.title) assembledContext += `Title: ${scrapedMeta.title}\n`;
+    if (scrapedMeta.author) assembledContext += `Creator/Channel: ${scrapedMeta.author}\n`;
+    if (scrapedMeta.description) assembledContext += `Summary/Description: ${scrapedMeta.description}\n`;
+  }
   if (options.context) {
     assembledContext += `\n[USER CAPTION / REEL NOTES]:\n${options.context}\n`;
   }
