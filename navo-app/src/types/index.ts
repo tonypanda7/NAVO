@@ -156,6 +156,13 @@ export interface ParseResult {
   analysis_cost_usd?: number | null;
   tokens_used?: number | null;
   model_name?: string | null;
+  whisper_transcript?: string | null;
+  vision_ocr_text?: string | null;
+  model_breakdown?: {
+    whisper_cost?: number;
+    vision_cost?: number;
+    llama_cost?: number;
+  };
 }
 
 // UI State types

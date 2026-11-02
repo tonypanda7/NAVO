@@ -75,18 +75,23 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const db = getDb();
   const body = await request.json();
-  const { url, context } = body;
+  const { url, context, audioBase64, imageBase64 } = body;
 
-  if (!url) {
-    return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+  if (!url && !context && !audioBase64 && !imageBase64) {
+    return NextResponse.json({ error: 'URL or content is required' }, { status: 400 });
   }
 
-  // Parse the URL using DeepInfra Llama 70B
+  // Parse using Multi-Model AI pipeline (Whisper + Ling-VL + Llama 70B)
   let parseResult;
   try {
-    parseResult = await parseUrl(url, context);
+    parseResult = await parseUrl({
+      url: url || 'https://instagram.com/reel',
+      context,
+      audioBase64,
+      imageBase64
+    });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'DeepInfra Llama extraction failed';
+    const message = error instanceof Error ? error.message : 'DeepInfra multimodal extraction failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
   

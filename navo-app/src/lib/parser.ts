@@ -1,16 +1,39 @@
-// Navo - AI Understanding Engine (Powered by DeepInfra Llama 3.3 70B Turbo)
+// Navo - Multi-Model AI Understanding Engine
+// Powered by:
+// 1. Whisper Large-v3 (Speech Transcription)
+// 2. Ling-3.0-flash-VL (Visual & On-Screen OCR Extraction)
+// 3. Llama 3.3 70B Turbo (Orchestration & Structured Intent Action Planning)
+
 import https from 'https';
 import { URL } from 'url';
 import type { ParseResult, ContentType, Intent, DeadlineSource, SourcePlatform } from '@/types';
+import { transcribeAudio } from './whisper';
+import { extractVisualAndOcr } from './vision';
 
-// Configuration - DeepInfra OpenAI-compatible endpoint
 const LLM_API_URL = process.env.LLM_API_URL || 'https://api.deepinfra.com/v1/openai/chat/completions';
 const LLM_API_KEY = process.env.DEEPINFRA_API_KEY || process.env.LLM_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-Turbo';
 
-const SYSTEM_PROMPT = `You are Navo's Understanding Engine, an AI that turns saved social media content (Instagram reels, YouTube Shorts/videos, TikToks, and web links) into finished actions.
+const SYSTEM_PROMPT = `You are Navo's Multi-Model Understanding Engine.
+You turn saved social content (Instagram reels, YouTube Shorts/videos, TikToks, and web links) into finished actions.
 
-Analyze the given URL, platform, and any user caption or notes. Extract structured intent, deadlines, context, and a 2-5 step action plan.
+You receive combined multimodal signals:
+1. URL & Platform metadata
+2. User Caption & Text notes
+3. Whisper Audio Transcript (spoken dialogue from the reel)
+4. Vision & OCR Text (text overlays, dates, and visual scene analysis from video frames)
+
+CLASSIFICATION RULES:
+- "opportunity": Hackathons, internships, fellowships, coding competitions, grants, scholarships, job openings. If words like "hackathon", "devpost", "prize", "build", "intern", "fellowship", "apply", "bounty" appear, it is an OPPORTUNITY (intent: "apply"). NEVER classify a tech/hackathon reel as food or recipe!
+- "recipe": Cooking, baking, food prep, drinks, ingredients.
+- "place": Cafes, restaurants, travel spots, cities, attractions.
+- "tutorial": Educational content, coding tutorials, design masterclasses, fitness form guides.
+- "event": Concerts, meetups, webinars, conferences.
+- "design": UI layouts, fonts, poster inspiration, aesthetic collections.
+- "product": Gadgets, clothing, tools with prices or buy links.
+- "other": Ambiguous items.
+
+CRITICAL: If an opaque URL is given with no descriptive text, audio transcript, or OCR, classify strictly as "other" with intent "someday". NEVER invent or hallucinate food/recipes for unknown links!
 
 You MUST respond strictly with valid JSON conforming to this schema:
 {
@@ -22,25 +45,19 @@ You MUST respond strictly with valid JSON conforming to this schema:
   "source_platform": "instagram|youtube|tiktok|web",
   "estimated_minutes": number,
   "extracted_data": {
-    // For opportunity: { "company": "...", "role": "...", "eligibility": "...", "application_link": "...", "documents_needed": ["CV", ...] }
+    // For opportunity: { "company": "...", "role": "...", "eligibility": "...", "application_link": "...", "documents_needed": ["CV", ...], "prize": "..." }
     // For recipe: { "ingredients": [{"name": "...", "quantity": "..."}], "steps": ["..."], "cooking_time_minutes": number }
     // For place: { "name": "...", "area": "...", "what_to_try": "...", "best_time": "..." }
     // For tutorial: { "topic": "...", "length_minutes": number, "level": "...", "steps_or_resources": ["..."] }
     // For event: { "date": "...", "venue": "...", "registration_link": "..." }
-    // For design/product/other: relevant structured key-values
   },
   "suggested_steps": [
-    { "title": "Step 1 title", "description": "Short specific actionable instruction" },
-    { "title": "Step 2 title", "description": "Short specific actionable instruction" }
+    { "title": "Step 1 title", "description": "Specific actionable next step" },
+    { "title": "Step 2 title", "description": "Specific actionable next step" }
   ]
 }
 
-Rules:
-1. Always analyze the URL domain, slugs, parameters, and all text provided in the user's caption or notes.
-2. "opportunity" includes internships, hackathons, fellowships, scholarships, competitions, and job applications.
-3. If any date or deadline is stated or strongly implied, format as YYYY-MM-DD and specify deadline_source. If no deadline exists, set deadline to null.
-4. Keep action steps high-impact (2-5 steps max) following Navo's core philosophy: "Each notification surfaces only the next step so users never face a wall of tasks."
-5. Return ONLY valid JSON with no conversational text.`;
+Return ONLY raw JSON with no markdown wrapping.`;
 
 function httpsPost(
   urlStr: string,
@@ -59,7 +76,7 @@ function httpsPost(
         headers: {
           ...headers,
           'Content-Length': Buffer.byteLength(bodyStr),
-          'Connection': 'close', // Avoid TLS stream ECONNRESET on Node 26
+          'Connection': 'close',
         },
         timeout: timeoutMs,
       },
@@ -89,48 +106,122 @@ function httpsPost(
   });
 }
 
-export async function parseUrl(url: string, context?: string): Promise<ParseResult> {
-  const apiKey = LLM_API_KEY.trim();
+export interface ParseInput {
+  url: string;
+  context?: string;
+  audioBase64?: string;
+  imageBase64?: string;
+}
 
+export async function parseUrl(input: string | ParseInput, legacyContext?: string): Promise<ParseResult> {
+  const options: ParseInput = typeof input === 'string'
+    ? { url: input, context: legacyContext }
+    : input;
+
+  const apiKey = LLM_API_KEY.trim();
   if (!apiKey) {
     throw new Error('DEEPINFRA_API_KEY / LLM_API_KEY is not configured in .env.local');
   }
 
-  // Real LLM call with up to 3 automatic retries for network resilience
+  let whisperCost = 0;
+  let whisperTranscript: string | null = null;
+  let visionCost = 0;
+  let visionOcrText: string | null = null;
+
+  // 1. Run Whisper Large-v3 if audio is attached
+  if (options.audioBase64) {
+    try {
+      const buffer = Buffer.from(options.audioBase64.replace(/^data:audio\/\w+;base64,/, ''), 'base64');
+      const whisperResult = await transcribeAudio(buffer);
+      whisperTranscript = whisperResult.text;
+      whisperCost = whisperResult.cost;
+    } catch (err) {
+      console.warn('Whisper transcription warning:', err);
+    }
+  }
+
+  // 2. Run Ling-3.0-flash-VL if screenshot/image is attached
+  if (options.imageBase64) {
+    try {
+      const dataUrl = options.imageBase64.startsWith('data:') 
+        ? options.imageBase64 
+        : `data:image/jpeg;base64,${options.imageBase64}`;
+      const visionResult = await extractVisualAndOcr(dataUrl);
+      visionOcrText = visionResult.ocr_text;
+      visionCost = visionResult.cost;
+    } catch (err) {
+      console.warn('Ling-VL Vision extraction warning:', err);
+    }
+  }
+
+  // 3. Assemble full multimodal prompt for Llama 3.3 70B
+  let assembledContext = '';
+  if (options.context) {
+    assembledContext += `\n[USER CAPTION / REEL NOTES]:\n${options.context}\n`;
+  }
+  if (whisperTranscript) {
+    assembledContext += `\n[WHISPER AUDIO TRANSCRIPT]:\n"${whisperTranscript}"\n`;
+  }
+  if (visionOcrText) {
+    assembledContext += `\n[ON-SCREEN OCR & VISUAL ANALYSIS (Ling-VL)]:\n${visionOcrText}\n`;
+  }
+
+  // 4. Call Llama 3.3 70B with retries
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await parseWithDeepInfraLlama(url, context, apiKey);
+      const llamaResult = await runLlamaExtraction(options.url, assembledContext, apiKey);
+      
+      const totalCost = (llamaResult.cost || 0.00003) + whisperCost + visionCost;
+      const modelNames = [
+        'Llama-3.3-70B',
+        whisperTranscript ? 'Whisper-Large-v3' : null,
+        visionOcrText ? 'Ling-3.0-flash-VL' : null
+      ].filter(Boolean).join(' + ');
+
+      return {
+        ...llamaResult.parsed,
+        analysis_cost_usd: totalCost,
+        tokens_used: llamaResult.tokens,
+        model_name: modelNames,
+        whisper_transcript: whisperTranscript,
+        vision_ocr_text: visionOcrText,
+        model_breakdown: {
+          llama_cost: llamaResult.cost,
+          whisper_cost: whisperCost > 0 ? whisperCost : undefined,
+          vision_cost: visionCost > 0 ? visionCost : undefined,
+        }
+      };
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      console.warn(`DeepInfra Llama attempt ${attempt} failed: ${lastError.message}`);
+      console.warn(`DeepInfra extraction attempt ${attempt} failed: ${lastError.message}`);
       if (attempt < 3) {
-        // Wait 1 second before retry
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
     }
   }
 
-  // If all attempts failed, throw the REAL error — DO NOT return fake mock placeholders!
-  throw new Error(`DeepInfra Llama 70B extraction failed after 3 attempts: ${lastError?.message}`);
+  throw new Error(`DeepInfra multimodal extraction failed: ${lastError?.message}`);
 }
 
-async function parseWithDeepInfraLlama(
+async function runLlamaExtraction(
   url: string,
-  context: string | undefined,
+  multimodalContext: string,
   apiKey: string
-): Promise<ParseResult> {
-  const userContent = context
-    ? `URL: ${url}\nUser Caption / Notes: ${context}\n\nPlease analyze this saved content and extract structured data conforming to the schema.`
-    : `URL: ${url}\n\nPlease analyze this saved URL and extract structured data conforming to the schema.`;
+): Promise<{ parsed: ParseResult; cost: number; tokens: number }> {
+  const userPrompt = `Analyze this saved reel / link:
+URL: ${url}
+${multimodalContext}
+
+Extract structured intent, deadline, and 2-5 follow-through steps as JSON according to your schema.`;
 
   const payload = JSON.stringify({
     model: LLM_MODEL,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userContent },
+      { role: 'user', content: userPrompt },
     ],
-    temperature: 0.2,
+    temperature: 0.1,
     max_tokens: 1500,
     response_format: { type: 'json_object' },
   });
@@ -142,7 +233,7 @@ async function parseWithDeepInfraLlama(
       'Authorization': `Bearer ${apiKey}`,
     },
     payload,
-    60000 // 60s timeout for 70B model inference
+    60000
   );
 
   if (response.status !== 200) {
@@ -156,7 +247,6 @@ async function parseWithDeepInfraLlama(
     throw new Error('No content returned from DeepInfra Llama model');
   }
 
-  // Clean JSON response if wrapped in markdown
   let cleaned = rawContent.trim();
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.replace(/^```json/, '').replace(/```$/, '').trim();
@@ -165,14 +255,11 @@ async function parseWithDeepInfraLlama(
   }
 
   const parsedJson = JSON.parse(cleaned);
+  const cost = typeof data.usage?.estimated_cost === 'number' ? data.usage.estimated_cost : 0.00003;
+  const tokens = data.usage?.total_tokens || 0;
 
-  // Extract usage & cost per reel directly from DeepInfra!
-  const costUsd = typeof data.usage?.estimated_cost === 'number'
-    ? data.usage.estimated_cost
-    : 0.00003;
-  const tokensUsed = data.usage?.total_tokens || null;
-
-  return validateParseResult(parsedJson, url, costUsd, tokensUsed, data.model || LLM_MODEL);
+  const validated = validateParseResult(parsedJson, url, cost, tokens, data.model || LLM_MODEL);
+  return { parsed: validated, cost, tokens };
 }
 
 function validateParseResult(
